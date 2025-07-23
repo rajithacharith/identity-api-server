@@ -1,5 +1,41 @@
 #!/bin/bash
 
+# Script usage information
+usage() {
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  --build-only    Skip code processing/log improvements, run build on existing branch"
+    echo "  --help, -h      Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0                 # Full processing: code suggestions, build, and PR creation"
+    echo "  $0 --build-only    # Build-only mode: skip code processing, test build on existing branch, create PR"
+    echo ""
+    exit 1
+}
+
+# Parse command line arguments
+BUILD_ONLY_MODE=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --build-only)
+            BUILD_ONLY_MODE=true
+            shift
+            ;;
+        --help|-h)
+            usage
+            ;;
+        *)
+            echo "Unknown option: $1"
+            usage
+            ;;
+    esac
+done
+
+echo "Script mode: $([ "$BUILD_ONLY_MODE" = true ] && echo "Build-only" || echo "Full processing")"
+
 # Source SDKMAN to enable sdk commands
 if [ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]; then
     source "$HOME/.sdkman/bin/sdkman-init.sh"
@@ -62,7 +98,7 @@ create_pull_request() {
     echo "Pull request created successfully for $repo_name!"
 }
 
-# Check if claude is installed
+# Check if claude is installed (needed for build fixing in both modes)
 if ! command -v claude &> /dev/null; then
     echo "Claude CLI not found. Installing..."
     npm install -g @anthropic-ai/claude-code
@@ -111,29 +147,37 @@ echo "$REPOS" | while read -r REPO_FULL; do
         DEFAULT_BRANCH=$(git remote show origin | grep 'HEAD branch' | cut -d' ' -f5)
         echo "Default branch is: $DEFAULT_BRANCH"
         
-        # Add upstream remote if it doesn't exist
-        if ! git remote | grep -q "upstream"; then
-            echo "Adding upstream remote..."
-            git remote add upstream "https://github.com/${REPO_OWNER}/${REPO_NAME}.git"
+        if [ "$BUILD_ONLY_MODE" = false ]; then
+            # Full processing mode: update and create new branch
+            # Add upstream remote if it doesn't exist
+            if ! git remote | grep -q "upstream"; then
+                echo "Adding upstream remote..."
+                git remote add upstream "https://github.com/${REPO_OWNER}/${REPO_NAME}.git"
+            fi
+            
+            # Fetch from both origin and upstream
+            echo "Fetching from origin and upstream..."
+            git fetch origin
+            git fetch upstream
+            
+            # Switch to default branch and pull latest from upstream
+            echo "Switching to $DEFAULT_BRANCH and updating from upstream..."
+            git checkout $DEFAULT_BRANCH
+            git pull upstream $DEFAULT_BRANCH
+            
+            # Push updated default branch to origin (your fork)
+            git push origin $DEFAULT_BRANCH
+            
+            # Create and switch to new branch based on updated default branch
+            echo "Creating new branch $BRANCH_NAME based on upstream/$DEFAULT_BRANCH..."
+            git checkout -b $BRANCH_NAME upstream/$DEFAULT_BRANCH
+            echo "Repository updated successfully!"
+        else
+            # Build-only mode: stay on current branch
+            CURRENT_BRANCH=$(git branch --show-current)
+            echo "Build-only mode: Staying on current branch '$CURRENT_BRANCH'"
+            echo "Repository ready for build testing!"
         fi
-        
-        # Fetch from both origin and upstream
-        echo "Fetching from origin and upstream..."
-        git fetch origin
-        git fetch upstream
-        
-        # Switch to default branch and pull latest from upstream
-        echo "Switching to $DEFAULT_BRANCH and updating from upstream..."
-        git checkout $DEFAULT_BRANCH
-        git pull upstream $DEFAULT_BRANCH
-        
-        # Push updated default branch to origin (your fork)
-        git push origin $DEFAULT_BRANCH
-        
-        # Create and switch to new branch based on updated default branch
-        echo "Creating new branch $BRANCH_NAME based on upstream/$DEFAULT_BRANCH..."
-        git checkout -b $BRANCH_NAME upstream/$DEFAULT_BRANCH
-        echo "Repository updated successfully!"
     else
         echo "Cloning repository $REPO_NAME..."
         # Clone the repository using the PAT
@@ -144,76 +188,88 @@ echo "$REPOS" | while read -r REPO_FULL; do
         DEFAULT_BRANCH=$(git remote show origin | grep 'HEAD branch' | cut -d' ' -f5)
         echo "Default branch is: $DEFAULT_BRANCH"
         
-        # Add upstream remote if this is a fork
-        echo "Adding upstream remote..."
-        git remote add upstream "https://github.com/${REPO_OWNER}/${REPO_NAME}.git"
-        
-        # Fetch from upstream
-        echo "Fetching from upstream..."
-        git fetch upstream
-        
-        # Create and switch to new branch based on upstream default branch
-        echo "Creating new branch $BRANCH_NAME based on upstream/$DEFAULT_BRANCH..."
-        git checkout -b $BRANCH_NAME upstream/$DEFAULT_BRANCH
-        echo "Repository cloned successfully!"
+        if [ "$BUILD_ONLY_MODE" = false ]; then
+            # Full processing mode: set up upstream and create new branch
+            # Add upstream remote if this is a fork
+            echo "Adding upstream remote..."
+            git remote add upstream "https://github.com/${REPO_OWNER}/${REPO_NAME}.git"
+            
+            # Fetch from upstream
+            echo "Fetching from upstream..."
+            git fetch upstream
+            
+            # Create and switch to new branch based on upstream default branch
+            echo "Creating new branch $BRANCH_NAME based on upstream/$DEFAULT_BRANCH..."
+            git checkout -b $BRANCH_NAME upstream/$DEFAULT_BRANCH
+            echo "Repository cloned successfully!"
+        else
+            # Build-only mode: stay on default branch
+            echo "Build-only mode: Staying on default branch '$DEFAULT_BRANCH'"
+            echo "Repository cloned successfully!"
+        fi
     fi
 
-    # Collect all allowed src/main directories first
-    allowed_dirs=()
-    while IFS= read -r src_dir; do
-        # Check if this src_dir is a subdirectory of any root folder in DIRECTORIES
-        is_allowed=false
-        while IFS= read -r root_dir; do
-            # Remove leading ./ from paths for comparison
-            normalized_src_dir=${src_dir#./}
-            normalized_root_dir=${root_dir#./}
+    # Skip code processing/log improvements in build-only mode
+    if [ "$BUILD_ONLY_MODE" = false ]; then
+        # Collect all allowed src/main directories first
+        allowed_dirs=()
+        while IFS= read -r src_dir; do
+            # Check if this src_dir is a subdirectory of any root folder in DIRECTORIES
+            is_allowed=false
+            while IFS= read -r root_dir; do
+                # Remove leading ./ from paths for comparison
+                normalized_src_dir=${src_dir#./}
+                normalized_root_dir=${root_dir#./}
+                
+                # Check if src_dir starts with root_dir (is a subdirectory)
+                if [[ "$normalized_src_dir" == "$normalized_root_dir"* ]]; then
+                    is_allowed=true
+                    echo "Directory $src_dir matches root folder $root_dir"
+                    break
+                fi
+            done <<< "$DIRECTORIES"
             
-            # Check if src_dir starts with root_dir (is a subdirectory)
-            if [[ "$normalized_src_dir" == "$normalized_root_dir"* ]]; then
-                is_allowed=true
-                echo "Directory $src_dir matches root folder $root_dir"
-                break
+            if [ "$is_allowed" = true ]; then
+                allowed_dirs+=("$src_dir")
+            else
+                echo "Skipping directory $src_dir as it is not a subdirectory of any root folder in the directories list."
             fi
-        done <<< "$DIRECTORIES"
+        done < <(find . -type d -path "*/src/main")
         
-        if [ "$is_allowed" = true ]; then
-            allowed_dirs+=("$src_dir")
-        else
-            echo "Skipping directory $src_dir as it is not a subdirectory of any root folder in the directories list."
-        fi
-    done < <(find . -type d -path "*/src/main")
-    
-    # Process all allowed directories and collect their PIDs
-    processor_pids=()
-    for src_dir in "${allowed_dirs[@]}"; do
-        echo "Processing src/main directory: $src_dir"
+        # Process all allowed directories and collect their PIDs
+        processor_pids=()
+        for src_dir in "${allowed_dirs[@]}"; do
+            echo "Processing src/main directory: $src_dir"
+            
+            # Run claude-processor in background
+            "$SCRIPT_DIR/claude-processor.sh" "$REPO_NAME" "$src_dir" > "processor_output_${src_dir//\//_}.$$.tmp" &
+            processor_pids+=($!)
+            
+            # Wait a moment before starting the next processor
+            echo "Waiting for 5 seconds before processing the next directory..."
+            sleep 5
+        done
         
-        # Run claude-processor in background
-        "$SCRIPT_DIR/claude-processor.sh" "$REPO_NAME" "$src_dir" > "processor_output_${src_dir//\//_}.$$.tmp" &
-        processor_pids+=($!)
+        # Wait for all processors to complete and collect outputs
+        echo "Waiting for all processors to complete..."
+        for i in "${!processor_pids[@]}"; do
+            processor_pid=${processor_pids[i]}
+            src_dir=${allowed_dirs[i]}
+            
+            wait $processor_pid
+            processor_output=$(<"processor_output_${src_dir//\//_}.$$.tmp")
+            rm "processor_output_${src_dir//\//_}.$$.tmp"
+            
+            # Print the output
+            echo "Output from processing $src_dir:"
+            echo "$processor_output"
+            echo "----------------------------------------"
+        done
         
-        # Wait a moment before starting the next processor
-        echo "Waiting for 5 seconds before processing the next directory..."
-        sleep 5
-    done
-    
-    # Wait for all processors to complete and collect outputs
-    echo "Waiting for all processors to complete..."
-    for i in "${!processor_pids[@]}"; do
-        processor_pid=${processor_pids[i]}
-        src_dir=${allowed_dirs[i]}
-        
-        wait $processor_pid
-        processor_output=$(<"processor_output_${src_dir//\//_}.$$.tmp")
-        rm "processor_output_${src_dir//\//_}.$$.tmp"
-        
-        # Print the output
-        echo "Output from processing $src_dir:"
-        echo "$processor_output"
-        echo "----------------------------------------"
-    done
-    
-    echo "All file reviews completed. Proceeding with build and PR creation..."
+        echo "All file reviews completed. Proceeding with build and PR creation..."
+    else
+        echo "Build-only mode: Skipping code processing/log improvements phase. Proceeding directly to build..."
+    fi
 
     # Function to attempt Maven build with retry logic
     attempt_maven_build() {
@@ -245,9 +301,21 @@ echo "$REPOS" | while read -r REPO_FULL; do
             
             # Check for successful build message
             if echo "$BUILD_OUTPUT" | grep -q "\[INFO\] BUILD SUCCESS"; then
-                echo "Maven build successful on attempt $attempt! Proceeding with PR creation..."
+                echo "Maven build successful on attempt $attempt!"
                 build_successful=true
-                create_pull_request "$REPO_OWNER" "$REPO_NAME" "$BRANCH_NAME" "$COMMIT_MESSAGE" "$PR_TITLE" "$PR_BODY" "$DEFAULT_BRANCH"
+                
+                # Create PR (in both modes)
+                echo "Proceeding with PR creation..."
+                
+                # Determine the branch name for PR creation
+                if [ "$BUILD_ONLY_MODE" = false ]; then
+                    PR_BRANCH="$BRANCH_NAME"
+                else
+                    PR_BRANCH=$(git branch --show-current)
+                fi
+                
+                create_pull_request "$REPO_OWNER" "$REPO_NAME" "$PR_BRANCH" "$COMMIT_MESSAGE" "$PR_TITLE" "$PR_BODY" "$DEFAULT_BRANCH"
+                
                 # Clean up: Move back to parent directory and remove repo
                 cd ..
                 rm -rf "$REPO_NAME"
