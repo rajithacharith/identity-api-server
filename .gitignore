@@ -1,0 +1,7 @@
+# Sensitive configuration files
+properties.json
+*.key
+*.pem
+*.p12
+*.jks
+*.keystore

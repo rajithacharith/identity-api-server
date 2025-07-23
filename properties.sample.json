@@ -1,0 +1,21 @@
+{
+  "env": {
+    "ANTHROPIC_API_KEY": "sk-ant-api03-YOUR_ANTHROPIC_API_KEY_HERE",
+    "GITHUB_TOKEN": "ghp_YOUR_GITHUB_PERSONAL_ACCESS_TOKEN_HERE"
+  },
+  "github": {
+    "repositories": [
+      "username/repository-name",
+      "organization/another-repo"
+    ],
+    "branch": "feature-branch-name",
+    "commit_message": "Your commit message describing the changes",
+    "pr_title": "[Component] Brief description of changes",
+    "pr_body": "Detailed description of the changes made in this pull request. Explain what was changed, why it was changed, and any important notes for reviewers."
+  },
+  "directories": [
+    "./components/example-component",
+    "./components/another-component",
+    "./service-stubs/example-stub"
+  ]
+}
