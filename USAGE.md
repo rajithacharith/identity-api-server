@@ -115,18 +115,42 @@ Use when you want to:
 - Repository cleanup status
 
 ### Build-Only Mode Output
-- Maven build attempts and results
+- Maven submodule discovery results
+- Individual module build attempts and results
+- Targeted error type detection and fixes
 - Build fix attempts (if needed)
-- Build success/failure status
+- Final verification build status
 - Repository cleanup status
+
+## Enhanced Build Process
+
+### Submodule Detection and Building
+- **Automatic Discovery**: Scans repository for all Maven modules (pom.xml files)
+- **Individual Module Processing**: Builds each submodule separately for better error isolation
+- **Targeted Error Analysis**: Identifies specific error types (checkstyle, compilation, general)
+- **Final Verification**: Runs complete build to ensure all modules work together
+
+### Error Type Detection and Fixing
+- **Checkstyle Violations**: Detects and fixes code style, formatting, naming conventions
+- **Compilation Errors**: Fixes missing imports, syntax errors, type resolution issues
+- **General Build Issues**: Handles dependency problems, configuration issues, plugin errors
+
+### Build Process Flow
+1. Discover all Maven modules in repository
+2. Build each module individually with retry logic
+3. Apply targeted Claude AI fixes based on error type
+4. Continue until all modules build successfully
+5. Run final verification build at root level
+6. Create PR if all builds successful
 
 ## Error Handling
 
 The script includes robust error handling:
-- **Build Failures**: Up to 10 retry attempts with AI-powered fixes
+- **Build Failures**: Up to 10 retry attempts per module with AI-powered fixes
 - **Java Version**: Automatic Java 11 setup via SDKMAN
 - **Missing Dependencies**: Maven dependency resolution
 - **Git Operations**: Proper branch management and remote setup
+- **Module Isolation**: Failed modules don't block other modules from building
 
 ## Tips
 

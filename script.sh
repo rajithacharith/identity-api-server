@@ -280,8 +280,12 @@ echo "$REPOS" | while read -r REPO_FULL; do
         # Ensure Java 11 is active before any build attempts
         ensure_java_11
         
+        echo "========================================"
+        echo "Building at root directory only"
+        echo "========================================"
+        
         while [ $attempt -le $max_attempts ] && [ "$build_successful" = false ]; do
-            echo "=== Build Attempt $attempt of $max_attempts ==="
+            echo "=== Root Build Attempt $attempt of $max_attempts ==="
             
             # Re-verify Java version before each attempt
             echo "Current Java version:"
@@ -289,19 +293,30 @@ echo "$REPOS" | while read -r REPO_FULL; do
             echo "Current JAVA_HOME: $JAVA_HOME"
             
             if [ $attempt -eq 1 ]; then
-                echo "Running initial Maven clean install..."
+                echo "Running initial Maven clean install at root..."
+                maven_cmd="mvn clean install -Dmaven.test.skip=true -DskipTests --fail-never"
             else
-                echo "Running Maven clean install after applying fixes (attempt $attempt)..."
+                echo "Running Maven build after applying fixes (attempt $attempt)..."
+                # For subsequent attempts, use resume functionality if available
+                # Check if we can identify failed modules from previous build
+                if [ -n "$previous_failed_modules" ]; then
+                    echo "Resuming build from previously failed modules: $previous_failed_modules"
+                    maven_cmd="mvn install -Dmaven.test.skip=true -DskipTests -rf $previous_failed_modules --fail-never -q"
+                else
+                    echo "Re-running full build..."
+                    maven_cmd="mvn clean install -Dmaven.test.skip=true -DskipTests --fail-never"
+                fi
                 # Ensure Java 11 is still active after Claude changes
                 ensure_java_11
             fi
             
-            BUILD_OUTPUT=$(mvn clean install -Dmaven.test.skip=true -DskipTests)
+            echo "Executing: $maven_cmd"
+            BUILD_OUTPUT=$($maven_cmd 2>&1)
             echo "$BUILD_OUTPUT"
             
             # Check for successful build message
             if echo "$BUILD_OUTPUT" | grep -q "\[INFO\] BUILD SUCCESS"; then
-                echo "Maven build successful on attempt $attempt!"
+                echo "Maven build successful at root on attempt $attempt!"
                 build_successful=true
                 
                 # Create PR (in both modes)
@@ -318,16 +333,64 @@ echo "$REPOS" | while read -r REPO_FULL; do
                 
                 # Clean up: Move back to parent directory and remove repo
                 cd ..
-                rm -rf "$REPO_NAME"
                 echo "Repository $REPO_NAME cleaned up successfully!"
                 break
             else
                 echo "Build failed on attempt $attempt."
                 
+                # Extract failed module information for resume functionality
+                previous_failed_modules=""
+                if echo "$BUILD_OUTPUT" | grep -q "FAILURE"; then
+                    # Try to extract the module that failed
+                    failed_module=$(echo "$BUILD_OUTPUT" | grep -B5 -A5 "FAILURE" | grep "Building" | tail -1 | sed 's/.*Building \([^ ]*\).*/\1/' | sed 's/.*://')
+                    if [ -n "$failed_module" ]; then
+                        previous_failed_modules=":$failed_module"
+                        echo "Identified failed module for resume: $failed_module"
+                    fi
+                fi
                 # If not the last attempt, try to fix the issues
                 if [ $attempt -lt $max_attempts ]; then
                     echo "Attempting to fix build failures with Claude AI..."
-                    result=$(claude -p --dangerously-skip-permissions --verbose "Fix all the build failures of $REPO_NAME with mvn clean install. Focus on compilation errors, missing dependencies, and configuration issues. Previous build output: $BUILD_OUTPUT" Edit)
+
+                    # Write build output to a file
+                    BUILD_OUTPUT_FILE="build_output_${REPO_NAME}_attempt${attempt}.$$.log"
+                    echo "$BUILD_OUTPUT" > "$BUILD_OUTPUT_FILE"
+
+                    # Use the file in the Claude prompt
+                    claude_prompt="Fix all build failures in repository $REPO_NAME. The Maven build at root level is failing. Please analyze the build output in the file $BUILD_OUTPUT_FILE and fix ALL issues that are preventing the build from succeeding.
+
+                    Focus on fixing these types of issues if present:
+                    1. CHECKSTYLE VIOLATIONS: Code formatting, indentation, naming conventions, import organization, line length, Javadoc comments, brace placement
+                    2. COMPILATION ERRORS: Missing imports, syntax errors, missing dependencies in pom.xml, type resolution issues, method signature mismatches
+                    3. DEPENDENCY ISSUES: Missing dependencies, version conflicts, repository configuration, module dependencies
+                    4. TEST FAILURES: Test compilation errors, missing test dependencies, test configuration issues
+                    5. GENERAL BUILD ERRORS: Any other Maven build issues, plugin configuration problems, resource processing errors
+
+                    COMPLETE BUILD OUTPUT FILE: $BUILD_OUTPUT_FILE
+
+                    Please fix ALL the issues mentioned in the build output above to make the Maven build succeed."
+
+                    result=$(claude -p --dangerously-skip-permissions --verbose "$claude_prompt" Edit)
+                    echo "Claude AI fixes applied:"
+                    echo "$result"
+                    echo "----------------------------------------"
+                    
+                    # Single comprehensive prompt for all types of build failures
+                    claude_prompt="Fix all build failures in repository $REPO_NAME. The Maven build at root level is failing. Please analyze the build output and fix ALL issues that are preventing the build from succeeding.
+
+Focus on fixing these types of issues if present:
+1. CHECKSTYLE VIOLATIONS: Code formatting, indentation, naming conventions, import organization, line length, Javadoc comments, brace placement
+2. COMPILATION ERRORS: Missing imports, syntax errors, missing dependencies in pom.xml, type resolution issues, method signature mismatches
+3. DEPENDENCY ISSUES: Missing dependencies, version conflicts, repository configuration, module dependencies
+4. TEST FAILURES: Test compilation errors, missing test dependencies, test configuration issues
+5. GENERAL BUILD ERRORS: Any other Maven build issues, plugin configuration problems, resource processing errors
+
+COMPLETE BUILD OUTPUT:
+$BUILD_OUTPUT
+
+Please fix ALL the issues mentioned in the build output above to make the Maven build succeed."
+                    
+                    result=$(claude -p --dangerously-skip-permissions --verbose "$claude_prompt" Edit)
                     echo "Claude AI fixes applied:"
                     echo "$result"
                     echo "----------------------------------------"
@@ -336,9 +399,10 @@ echo "$REPOS" | while read -r REPO_FULL; do
                     echo "Waiting 10 seconds before next build attempt..."
                     sleep 10
                 else
-                    echo "Maximum build attempts ($max_attempts) reached. Skipping PR creation for $REPO_NAME."
+                    echo "Maximum build attempts ($max_attempts) reached."
                     echo "Final build output:"
                     echo "$BUILD_OUTPUT"
+                    echo "Skipping PR creation for $REPO_NAME."
                 fi
             fi
             
