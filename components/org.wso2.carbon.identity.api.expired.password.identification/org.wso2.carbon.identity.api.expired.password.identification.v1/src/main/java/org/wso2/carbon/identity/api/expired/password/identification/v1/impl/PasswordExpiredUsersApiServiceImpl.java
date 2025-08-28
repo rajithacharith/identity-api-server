@@ -18,6 +18,8 @@
 
 package org.wso2.carbon.identity.api.expired.password.identification.v1.impl;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.identity.api.expired.password.identification.common.ContextLoader;
 import org.wso2.carbon.identity.api.expired.password.identification.v1.PasswordExpiredUsersApiService;
 import org.wso2.carbon.identity.api.expired.password.identification.v1.core.PasswordExpiredUsersManagementApiService;
@@ -30,14 +32,20 @@ import javax.ws.rs.core.Response;
  */
 public class PasswordExpiredUsersApiServiceImpl implements PasswordExpiredUsersApiService {
 
+    private static final Log LOG = LogFactory.getLog(PasswordExpiredUsersApiServiceImpl.class);
     private final PasswordExpiredUsersManagementApiService passwordExpiredUsersManagementApiService;
 
     public PasswordExpiredUsersApiServiceImpl() {
 
         try {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Initializing PasswordExpiredUsersApiServiceImpl");
+            }
             this.passwordExpiredUsersManagementApiService = PasswordExpiredUsersManagementApiServiceFactory
                     .getExpiredPasswordIdentificationService();
+            LOG.info("PasswordExpiredUsersApiServiceImpl initialized successfully");
         } catch (IllegalStateException e) {
+            LOG.error("Error occurred while initiating password expired users management service", e);
             throw new RuntimeException("Error occurred while initiating password expired users management service.", e);
         }
     }
@@ -46,6 +54,10 @@ public class PasswordExpiredUsersApiServiceImpl implements PasswordExpiredUsersA
     public Response getPasswordExpiredUsers(String expiredAfter, String excludeAfter) {
 
         String tenantDomain = ContextLoader.getTenantDomainFromContext();
+        if (LOG.isDebugEnabled()) {
+            LOG.debug(String.format("API call to get password expired users for tenant: %s with parameters " +
+                    "expiredAfter: %s, excludeAfter: %s", tenantDomain, expiredAfter, excludeAfter));
+        }
         return Response.ok().entity(passwordExpiredUsersManagementApiService.getPasswordExpiredUsers(
                 expiredAfter, excludeAfter, tenantDomain)).build();
     }
