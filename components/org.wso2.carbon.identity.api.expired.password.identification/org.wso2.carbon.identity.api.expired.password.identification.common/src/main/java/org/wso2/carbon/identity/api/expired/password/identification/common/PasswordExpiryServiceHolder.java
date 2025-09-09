@@ -18,6 +18,8 @@
 
 package org.wso2.carbon.identity.api.expired.password.identification.common;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.identity.password.expiry.services.ExpiredPasswordIdentificationService;
 
@@ -25,6 +27,8 @@ import org.wso2.carbon.identity.password.expiry.services.ExpiredPasswordIdentifi
  * Service holder class for password expired users identification.
  */
 public class PasswordExpiryServiceHolder {
+
+    private static final Log LOG = LogFactory.getLog(PasswordExpiryServiceHolder.class);
 
     private PasswordExpiryServiceHolder() {}
 
