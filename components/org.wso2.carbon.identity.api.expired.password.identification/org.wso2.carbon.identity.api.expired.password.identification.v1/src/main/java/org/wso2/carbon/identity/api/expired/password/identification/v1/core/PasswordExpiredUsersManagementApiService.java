@@ -21,7 +21,8 @@ package org.wso2.carbon.identity.api.expired.password.identification.v1.core;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.wso2.carbon.identity.api.expired.password.identification.common.util.ExpiredPasswordIdentificationConstants.ErrorMessage;
+import org.wso2.carbon.identity.api.expired.password.identification.common.util
+        .ExpiredPasswordIdentificationConstants.ErrorMessage;
 import org.wso2.carbon.identity.api.expired.password.identification.v1.model.PasswordExpiredUser;
 import org.wso2.carbon.identity.api.server.common.error.APIError;
 import org.wso2.carbon.identity.api.server.common.error.ErrorResponse;
@@ -42,9 +43,12 @@ import java.util.regex.Pattern;
 
 import javax.ws.rs.core.Response;
 
-import static org.wso2.carbon.identity.api.expired.password.identification.common.util.ExpiredPasswordIdentificationConstants.DATE_EXCLUDE_AFTER;
-import static org.wso2.carbon.identity.api.expired.password.identification.common.util.ExpiredPasswordIdentificationConstants.DATE_EXPIRED_AFTER;
-import static org.wso2.carbon.identity.api.expired.password.identification.common.util.ExpiredPasswordIdentificationConstants.DATE_FORMAT_REGEX;
+import static org.wso2.carbon.identity.api.expired.password.identification.common.util
+        .ExpiredPasswordIdentificationConstants.DATE_EXCLUDE_AFTER;
+import static org.wso2.carbon.identity.api.expired.password.identification.common.util
+        .ExpiredPasswordIdentificationConstants.DATE_EXPIRED_AFTER;
+import static org.wso2.carbon.identity.api.expired.password.identification.common.util
+        .ExpiredPasswordIdentificationConstants.DATE_FORMAT_REGEX;
 
 /**
  * Calls internal osgi services to perform password expired user identification management related operations.
@@ -58,6 +62,10 @@ public class PasswordExpiredUsersManagementApiService {
             ExpiredPasswordIdentificationService expiredPasswordIdentificationService) {
 
         this.expiredPasswordIdentificationService = expiredPasswordIdentificationService;
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("PasswordExpiredUsersManagementApiService initialized with expired password " +
+                    "identification service.");
+        }
     }
 
     /**
@@ -71,6 +79,10 @@ public class PasswordExpiredUsersManagementApiService {
     public List<PasswordExpiredUser> getPasswordExpiredUsers(
             String expiredAfter, String excludeAfter, String tenantDomain) {
 
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Starting password expired users retrieval for tenant: " + tenantDomain);
+        }
+        
         List<PasswordExpiredUserModel> passwordExpiredUsers = null;
         try {
             validateDates(expiredAfter, excludeAfter);
@@ -78,13 +90,25 @@ public class PasswordExpiredUsersManagementApiService {
             LocalDateTime expiredAfterDate = convertToDateObject(expiredAfter, DATE_EXPIRED_AFTER);
             LocalDateTime excludeAfterDate = convertToDateObject(excludeAfter, DATE_EXCLUDE_AFTER);
             if (excludeAfterDate == null) {
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Retrieving password expired users from specific date: " + expiredAfterDate);
+                }
                 passwordExpiredUsers = expiredPasswordIdentificationService
                         .getPasswordExpiredUsersFromSpecificDate(expiredAfterDate, tenantDomain);
             } else {
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Retrieving password expired users between dates: " + expiredAfterDate + 
+                            " and " + excludeAfterDate);
+                }
                 passwordExpiredUsers = expiredPasswordIdentificationService
                         .getPasswordExpiredUsersBetweenSpecificDates(expiredAfterDate, excludeAfterDate, tenantDomain);
             }
-            return buildResponse(passwordExpiredUsers);
+            
+            if (LOG.isDebugEnabled()) {
+                int userCount = passwordExpiredUsers != null ? passwordExpiredUsers.size() : 0;
+                LOG.debug("Retrieved " + userCount + " password expired users for tenant: " + tenantDomain);
+            }
+            return buildResponse(passwordExpiredUsers != null ? passwordExpiredUsers : new ArrayList<>());
         } catch (ExpiredPasswordIdentificationException e) {
             throw handleExpiredPasswordIdentificationException(e,
                     ErrorMessage.ERROR_RETRIEVING_PASSWORD_EXPIRED_USERS, tenantDomain);
@@ -253,11 +277,15 @@ public class PasswordExpiredUsersManagementApiService {
 
         try {
             if (!PasswordPolicyUtils.isPasswordExpiryEnabled(tenantDomain)) {
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Password expiry feature is not enabled for tenant: " + tenantDomain);
+                }
                 ErrorMessage error = ErrorMessage.PASSWORD_EXPIRY_FEATURE_NOT_ENABLED;
                 throw new ExpiredPasswordIdentificationClientException(error.getCode(), error.getMessage(),
                         error.getDescription());
             }
         } catch (PostAuthenticationFailedException e) {
+            LOG.error("Error occurred while validating password expiry feature for tenant: " + tenantDomain, e);
             throw new ExpiredPasswordIdentificationServerException(e);
         }
     }

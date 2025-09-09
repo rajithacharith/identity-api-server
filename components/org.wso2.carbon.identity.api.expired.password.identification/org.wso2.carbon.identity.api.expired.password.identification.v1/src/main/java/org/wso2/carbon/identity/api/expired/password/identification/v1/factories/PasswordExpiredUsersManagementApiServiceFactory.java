@@ -18,6 +18,8 @@
 
 package org.wso2.carbon.identity.api.expired.password.identification.v1.factories;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.identity.api.expired.password.identification.common.PasswordExpiryServiceHolder;
 import org.wso2.carbon.identity.api.expired.password.identification.v1.core.PasswordExpiredUsersManagementApiService;
 import org.wso2.carbon.identity.password.expiry.services.ExpiredPasswordIdentificationService;
@@ -27,6 +29,7 @@ import org.wso2.carbon.identity.password.expiry.services.ExpiredPasswordIdentifi
  */
 public class PasswordExpiredUsersManagementApiServiceFactory {
 
+    private static final Log log = LogFactory.getLog(PasswordExpiredUsersManagementApiServiceFactory.class);
     private static final PasswordExpiredUsersManagementApiService SERVICE;
 
     static {
@@ -34,10 +37,14 @@ public class PasswordExpiredUsersManagementApiServiceFactory {
                 PasswordExpiryServiceHolder.getExpiredPasswordIdentificationService();
 
         if (expiredPasswordIdentificationService == null) {
-            throw new IllegalStateException("RolePermissionManagementService is not available from OSGi context.");
+            log.error("ExpiredPasswordIdentificationService is not available from OSGi context.");
+            throw new IllegalStateException("ExpiredPasswordIdentificationService is not available from OSGi context.");
         }
 
         SERVICE = new PasswordExpiredUsersManagementApiService(expiredPasswordIdentificationService);
+        if (log.isDebugEnabled()) {
+            log.debug("PasswordExpiredUsersManagementApiServiceFactory initialized successfully.");
+        }
     }
 
     /**
@@ -47,6 +54,9 @@ public class PasswordExpiredUsersManagementApiServiceFactory {
      */
     public static PasswordExpiredUsersManagementApiService getExpiredPasswordIdentificationService() {
 
+        if (log.isDebugEnabled()) {
+            log.debug("Returning PasswordExpiredUsersManagementApiService instance.");
+        }
         return SERVICE;
     }
 }
