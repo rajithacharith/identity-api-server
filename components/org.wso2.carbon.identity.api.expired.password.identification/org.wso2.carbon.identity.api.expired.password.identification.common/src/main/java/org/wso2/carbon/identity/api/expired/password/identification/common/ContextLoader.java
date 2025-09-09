@@ -18,6 +18,8 @@
 
 package org.wso2.carbon.identity.api.expired.password.identification.common;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.base.MultitenantConstants;
 import org.wso2.carbon.identity.core.util.IdentityCoreConstants;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
@@ -27,6 +29,8 @@ import org.wso2.carbon.identity.core.util.IdentityUtil;
  */
 public class ContextLoader {
 
+    private static final Log log = LogFactory.getLog(ContextLoader.class);
+
     /**
      * Retrieves loaded tenant domain from carbon context.
      *
@@ -35,9 +39,18 @@ public class ContextLoader {
     public static String getTenantDomainFromContext() {
 
         String tenantDomain = MultitenantConstants.SUPER_TENANT_DOMAIN_NAME;
-        if (IdentityUtil.threadLocalProperties.get().get(IdentityCoreConstants.TENANT_NAME_FROM_CONTEXT) != null) {
+        if (IdentityUtil.threadLocalProperties.get() != null &&
+                IdentityUtil.threadLocalProperties.get().get(IdentityCoreConstants.TENANT_NAME_FROM_CONTEXT) != null) {
             tenantDomain = (String) IdentityUtil.threadLocalProperties.get()
                     .get(IdentityCoreConstants.TENANT_NAME_FROM_CONTEXT);
+            if (log.isDebugEnabled()) {
+                log.debug("Retrieved tenant domain from context: " + 
+                        (tenantDomain != null ? tenantDomain : "null"));
+            }
+        } else {
+            if (log.isDebugEnabled()) {
+                log.debug("Tenant domain not found in context, using super tenant domain: " + tenantDomain);
+            }
         }
         return tenantDomain;
     }

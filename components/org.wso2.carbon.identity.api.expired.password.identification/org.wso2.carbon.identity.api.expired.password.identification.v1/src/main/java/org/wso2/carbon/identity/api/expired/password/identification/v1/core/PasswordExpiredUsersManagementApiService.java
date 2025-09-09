@@ -21,7 +21,8 @@ package org.wso2.carbon.identity.api.expired.password.identification.v1.core;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.wso2.carbon.identity.api.expired.password.identification.common.util.ExpiredPasswordIdentificationConstants.ErrorMessage;
+import org.wso2.carbon.identity.api.expired.password.identification.common.util
+        .ExpiredPasswordIdentificationConstants.ErrorMessage;
 import org.wso2.carbon.identity.api.expired.password.identification.v1.model.PasswordExpiredUser;
 import org.wso2.carbon.identity.api.server.common.error.APIError;
 import org.wso2.carbon.identity.api.server.common.error.ErrorResponse;
@@ -42,9 +43,12 @@ import java.util.regex.Pattern;
 
 import javax.ws.rs.core.Response;
 
-import static org.wso2.carbon.identity.api.expired.password.identification.common.util.ExpiredPasswordIdentificationConstants.DATE_EXCLUDE_AFTER;
-import static org.wso2.carbon.identity.api.expired.password.identification.common.util.ExpiredPasswordIdentificationConstants.DATE_EXPIRED_AFTER;
-import static org.wso2.carbon.identity.api.expired.password.identification.common.util.ExpiredPasswordIdentificationConstants.DATE_FORMAT_REGEX;
+import static org.wso2.carbon.identity.api.expired.password.identification.common.util
+        .ExpiredPasswordIdentificationConstants.DATE_EXCLUDE_AFTER;
+import static org.wso2.carbon.identity.api.expired.password.identification.common.util
+        .ExpiredPasswordIdentificationConstants.DATE_EXPIRED_AFTER;
+import static org.wso2.carbon.identity.api.expired.password.identification.common.util
+        .ExpiredPasswordIdentificationConstants.DATE_FORMAT_REGEX;
 
 /**
  * Calls internal osgi services to perform password expired user identification management related operations.
@@ -71,6 +75,10 @@ public class PasswordExpiredUsersManagementApiService {
     public List<PasswordExpiredUser> getPasswordExpiredUsers(
             String expiredAfter, String excludeAfter, String tenantDomain) {
 
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Getting password expired users for tenant: " + tenantDomain + " with expiredAfter: " +
+                    expiredAfter + " and excludeAfter: " + excludeAfter);
+        }
         List<PasswordExpiredUserModel> passwordExpiredUsers = null;
         try {
             validateDates(expiredAfter, excludeAfter);
@@ -78,12 +86,20 @@ public class PasswordExpiredUsersManagementApiService {
             LocalDateTime expiredAfterDate = convertToDateObject(expiredAfter, DATE_EXPIRED_AFTER);
             LocalDateTime excludeAfterDate = convertToDateObject(excludeAfter, DATE_EXCLUDE_AFTER);
             if (excludeAfterDate == null) {
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Retrieving password expired users from specific date for tenant: " + tenantDomain);
+                }
                 passwordExpiredUsers = expiredPasswordIdentificationService
                         .getPasswordExpiredUsersFromSpecificDate(expiredAfterDate, tenantDomain);
             } else {
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Retrieving password expired users between specific dates for tenant: " + tenantDomain);
+                }
                 passwordExpiredUsers = expiredPasswordIdentificationService
                         .getPasswordExpiredUsersBetweenSpecificDates(expiredAfterDate, excludeAfterDate, tenantDomain);
             }
+            LOG.info("Successfully retrieved " + (passwordExpiredUsers != null ? passwordExpiredUsers.size() : 0) +
+                    " password expired users for tenant: " + tenantDomain);
             return buildResponse(passwordExpiredUsers);
         } catch (ExpiredPasswordIdentificationException e) {
             throw handleExpiredPasswordIdentificationException(e,
@@ -101,10 +117,16 @@ public class PasswordExpiredUsersManagementApiService {
     private void validateDates(String expiredAfter, String excludeAfter) throws
             ExpiredPasswordIdentificationClientException {
 
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Validating dates. ExpiredAfter: " + expiredAfter + ", ExcludeAfter: " + excludeAfter);
+        }
         // Validate the date format.
         validateDateFormat(expiredAfter, DATE_EXPIRED_AFTER);
         if (StringUtils.isNotEmpty(excludeAfter)) {
             validateDateFormat(excludeAfter, DATE_EXCLUDE_AFTER);
+        }
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Date validation completed successfully.");
         }
     }
 
@@ -118,8 +140,17 @@ public class PasswordExpiredUsersManagementApiService {
     private void validateDateFormat(String dateString, String dateType) throws
             ExpiredPasswordIdentificationClientException {
 
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Validating date format for " + dateType + ": " + dateString);
+        }
         if (Pattern.matches(DATE_FORMAT_REGEX, dateString)) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Date format validation successful for " + dateType + ": " + dateString);
+            }
             return;
+        }
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Date format validation failed for " + dateType + ": " + dateString);
         }
         ErrorMessage error = ErrorMessage.ERROR_DATE_REGEX_MISMATCH;
         throw new ExpiredPasswordIdentificationClientException(error.getCode(), error.getMessage(),
@@ -139,10 +170,23 @@ public class PasswordExpiredUsersManagementApiService {
 
         try {
             if (StringUtils.isEmpty(dateString)) {
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Date string is empty for " + dateType + ", returning null.");
+                }
                 return null;
             }
-            return LocalDate.parse(dateString).atStartOfDay();
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Converting date string to LocalDateTime for " + dateType + ": " + dateString);
+            }
+            LocalDateTime dateTime = LocalDate.parse(dateString).atStartOfDay();
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Successfully converted date string for " + dateType + " to: " + dateTime);
+            }
+            return dateTime;
         } catch (DateTimeParseException e) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Failed to parse date string for " + dateType + ": " + dateString, e);
+            }
             ErrorMessage error = ErrorMessage.ERROR_INVALID_DATE;
             throw new ExpiredPasswordIdentificationClientException(error.getCode(), error.getMessage(),
                     String.format(error.getDescription(), dateType));
@@ -157,13 +201,23 @@ public class PasswordExpiredUsersManagementApiService {
      */
     private List<PasswordExpiredUser> buildResponse(List<PasswordExpiredUserModel> passwordExpiredUserModels) {
 
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Building response for " + 
+                    (passwordExpiredUserModels != null ? passwordExpiredUserModels.size() : 0) + 
+                    " password expired users.");
+        }
         List<PasswordExpiredUser> passwordExpiredUsers = new ArrayList<>();
-        for (PasswordExpiredUserModel passwordExpiredUserModel : passwordExpiredUserModels) {
-            PasswordExpiredUser passwordExpiredUser = new PasswordExpiredUser();
-            passwordExpiredUser.setUsername(passwordExpiredUserModel.getUsername());
-            passwordExpiredUser.setUserStoreDomain(passwordExpiredUserModel.getUserStoreDomain());
-            passwordExpiredUser.setUserId(passwordExpiredUserModel.getUserId());
-            passwordExpiredUsers.add(passwordExpiredUser);
+        if (passwordExpiredUserModels != null) {
+            for (PasswordExpiredUserModel passwordExpiredUserModel : passwordExpiredUserModels) {
+                PasswordExpiredUser passwordExpiredUser = new PasswordExpiredUser();
+                passwordExpiredUser.setUsername(passwordExpiredUserModel.getUsername());
+                passwordExpiredUser.setUserStoreDomain(passwordExpiredUserModel.getUserStoreDomain());
+                passwordExpiredUser.setUserId(passwordExpiredUserModel.getUserId());
+                passwordExpiredUsers.add(passwordExpiredUser);
+            }
+        }
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Successfully built response with " + passwordExpiredUsers.size() + " users.");
         }
         return passwordExpiredUsers;
     }
@@ -251,13 +305,21 @@ public class PasswordExpiredUsersManagementApiService {
     private void validatePasswordExpiryFeatureEnabled (String tenantDomain)
             throws ExpiredPasswordIdentificationException {
 
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Validating password expiry feature status for tenant: " + tenantDomain);
+        }
         try {
             if (!PasswordPolicyUtils.isPasswordExpiryEnabled(tenantDomain)) {
+                LOG.warn("Password expiry feature is not enabled for tenant: " + tenantDomain);
                 ErrorMessage error = ErrorMessage.PASSWORD_EXPIRY_FEATURE_NOT_ENABLED;
                 throw new ExpiredPasswordIdentificationClientException(error.getCode(), error.getMessage(),
                         error.getDescription());
             }
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Password expiry feature is enabled for tenant: " + tenantDomain);
+            }
         } catch (PostAuthenticationFailedException e) {
+            LOG.error("Error occurred while checking password expiry feature status for tenant: " + tenantDomain);
             throw new ExpiredPasswordIdentificationServerException(e);
         }
     }

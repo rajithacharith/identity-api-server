@@ -18,10 +18,13 @@
 
 package org.wso2.carbon.identity.api.expired.password.identification.v1.impl;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.identity.api.expired.password.identification.common.ContextLoader;
 import org.wso2.carbon.identity.api.expired.password.identification.v1.PasswordExpiredUsersApiService;
 import org.wso2.carbon.identity.api.expired.password.identification.v1.core.PasswordExpiredUsersManagementApiService;
-import org.wso2.carbon.identity.api.expired.password.identification.v1.factories.PasswordExpiredUsersManagementApiServiceFactory;
+import org.wso2.carbon.identity.api.expired.password.identification.v1.factories
+        .PasswordExpiredUsersManagementApiServiceFactory;
 
 import javax.ws.rs.core.Response;
 
@@ -30,14 +33,22 @@ import javax.ws.rs.core.Response;
  */
 public class PasswordExpiredUsersApiServiceImpl implements PasswordExpiredUsersApiService {
 
+    private static final Log LOG = LogFactory.getLog(PasswordExpiredUsersApiServiceImpl.class);
     private final PasswordExpiredUsersManagementApiService passwordExpiredUsersManagementApiService;
 
     public PasswordExpiredUsersApiServiceImpl() {
 
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Initializing PasswordExpiredUsersApiServiceImpl.");
+        }
         try {
             this.passwordExpiredUsersManagementApiService = PasswordExpiredUsersManagementApiServiceFactory
                     .getExpiredPasswordIdentificationService();
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("PasswordExpiredUsersApiServiceImpl initialized successfully.");
+            }
         } catch (IllegalStateException e) {
+            LOG.error("Error occurred while initiating password expired users management service.");
             throw new RuntimeException("Error occurred while initiating password expired users management service.", e);
         }
     }
@@ -45,7 +56,15 @@ public class PasswordExpiredUsersApiServiceImpl implements PasswordExpiredUsersA
     @Override
     public Response getPasswordExpiredUsers(String expiredAfter, String excludeAfter) {
 
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Retrieving password expired users with expiredAfter: " + expiredAfter +
+                    " and excludeAfter: " + excludeAfter);
+        }
         String tenantDomain = ContextLoader.getTenantDomainFromContext();
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Processing request for tenant domain: " + tenantDomain);
+        }
+        LOG.info("Retrieving password expired users for tenant: " + tenantDomain);
         return Response.ok().entity(passwordExpiredUsersManagementApiService.getPasswordExpiredUsers(
                 expiredAfter, excludeAfter, tenantDomain)).build();
     }
